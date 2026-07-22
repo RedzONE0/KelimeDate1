@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Kelimedate",
+    "slug": "kelimedate",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#060816"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kelimedate.app"
+    },
+    "android": {
+      "package": "com.kelimedate.app",
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#060816"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "@react-native-firebase/app"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8a4d6847-6bfd-416d-b392-34da85726edf"
+      }
+    }
+  }
+}

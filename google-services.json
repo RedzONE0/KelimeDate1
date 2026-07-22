@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "681199810177",
+    "project_id": "kelimedate1",
+    "storage_bucket": "kelimedate1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:681199810177:android:22b557f8b12aaa79373f80",
+        "android_client_info": {
+          "package_name": "com.kelimedate.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "681199810177-j174mj0nmgutam7qhu6e3cgacch9vgi7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kelimedate.app",
+            "certificate_hash": "212253cb076dd24cda3dcaf5846fc1b62b7ec490"
+          }
+        },
+        {
+          "client_id": "681199810177-9pecsef70hbqpb2rafr9nhd8bh32gf1c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA4bdrQXR00yiAosJaxwND--2-vPIL4hEw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "681199810177-9pecsef70hbqpb2rafr9nhd8bh32gf1c.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
