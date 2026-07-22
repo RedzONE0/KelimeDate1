@@ -21,9 +21,10 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      navigation.replace(isNewUser ? 'Profile' : 'Home');
+      // 🎯 Akıllı yönlendirme (AppNavigator) devrede olduğu için el ile replace yapmıyoruz.
+      console.log("Kelimedate kapısı açıldı, akıllı navigasyon yönlendiriyor...");
     }
-  }, [isAuthenticated, isLoading, isNewUser, navigation]);
+  }, [isAuthenticated, isLoading]);
 
   const handleSocialLogin = async (provider: 'google' | 'apple') => {
     setErrorMessage('');

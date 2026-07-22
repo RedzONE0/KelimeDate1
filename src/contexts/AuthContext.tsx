@@ -91,40 +91,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return unsubscribe;
   }, []);
 
-       // Google ile Giriş Fonksiyonu (Garantili Sürüm)
-  const loginWithGoogle = async (): Promise<void> => {
-    setAuthState((prev) => ({ ...prev, isLoading: true }));
-    try {
-      if (Platform.OS === 'web') {
-        throw new Error('Google girişi bu platformda desteklenmiyor.');
-      }
-      
-      // 1. Play Servislerini Kontrol Et
-      await GoogleSignin.hasPlayServices();
-      
-      // 2. Giriş İsteyip Gelen Veriyi Al
-      const signInResult = await GoogleSignin.signIn();
-      
-      // 🎯 KRİTİK GÜNCELLEME: Yeni sürümlerde idToken 'data' objesinin içindedir.
-      // Her ihtimale karşı hem eski hem yeni sürüm yollarını güvene alıyoruz:
-      const idToken = signInResult?.data?.idToken || (signInResult as any)?.idToken;
-
-      if (!idToken) {
-        throw new Error('Google identity token (idToken) alınamadı. Lütfen SHA-1 ayarlarınızı kontrol edin.');
-      }
-
-      // 🎯 Firebase kimlik kartını sadece idToken ile oluşturuyoruz (accessToken boş kalabilir, hata vermez)
-      const credential = auth.GoogleAuthProvider.credential(idToken);
-      
-      // 3. Firebase Oturumunu Başlat
-      await firebaseAuth.signInWithCredential(credential);
-    } catch (error) {
-      console.error('Google login detaylı hatası:', error);
-      throw error;
-    } finally {
-      setAuthState((prev) => ({ ...prev, isLoading: false }));
+    const loginWithGoogle = async (): Promise<void> => {
+  setAuthState((prev) => ({ ...prev, isLoading: true }));
+  try {
+    if (Platform.OS === 'web') {
+      throw new Error('Google girişi bu platformda desteklenmiyor.');
     }
-  };
+
+    await GoogleSignin.hasPlayServices();
+    const signInResult = await GoogleSignin.signIn();
+
+    const idToken = signInResult?.data?.idToken;
+
+    if (!idToken) {
+      throw new Error('Google identity token (idToken) boş döndü! webClientId / SHA-1 kontrol et.');
+    }
+
+    // 🎯 Gerçek accessToken'ı ayrıca çek
+    const { accessToken } = await GoogleSignin.getTokens();
+
+    console.log('idToken:', idToken, 'accessToken:', accessToken);
+
+    if (!accessToken) {
+      throw new Error('accessToken boş döndü! Google Cloud Console > OAuth consent screen / scopes kontrol et.');
+    }
+
+    // 🎯 İkisini birden ver
+    const credential = auth.GoogleAuthProvider.credential(idToken, accessToken);
+
+    await firebaseAuth.signInWithCredential(credential);
+  } catch (error) {
+    console.error('Google login detaylı hatası:', error);
+    throw error;
+  } finally {
+    setAuthState((prev) => ({ ...prev, isLoading: false }));
+  }
+};
 
   // Apple ile Giriş Fonksiyonu
   const loginWithApple = async (): Promise<void> => {

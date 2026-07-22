@@ -101,7 +101,7 @@ musicGenres: uniqueStringArray(musicGenres),
 };
 
 await updateProfileData(profilePatch);
-  navigation.replace?.('Home');
+  console.log("Profil başarıyla kaydedildi, yönlendirme tetikleniyor...");
 } catch (err: any) {
   Alert.alert('Kaydetme Hatası', err?.message ?? 'Profil kaydedilemedi.');
 } finally {
