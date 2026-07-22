@@ -6,9 +6,11 @@ import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginScreen() {
   const navigation = useNavigation<any>();
-  const { isAuthenticated, isLoading, isNewUser, loginWithGoogle, loginWithApple } = useAuth();
+  
+  // 🎯 GÜNCELLEME: Yüklenme durumunu tamamen AuthContext'ten yönetiyoruz
+  const { isAuthenticated, isLoading, loginWithGoogle, loginWithApple } = useAuth();
   const [errorMessage, setErrorMessage] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
@@ -19,16 +21,9 @@ export default function LoginScreen() {
     ]).start();
   }, [fadeAnim, slideAnim]);
 
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      // 🎯 Akıllı yönlendirme (AppNavigator) devrede olduğu için el ile replace yapmıyoruz.
-      console.log("Kelimedate kapısı açıldı, akıllı navigasyon yönlendiriyor...");
-    }
-  }, [isAuthenticated, isLoading]);
-
+  // 🎯 SOSYAL GİRİŞ MOTORU: Durum çakışmaları temizlendi
   const handleSocialLogin = async (provider: 'google' | 'apple') => {
     setErrorMessage('');
-    setIsSubmitting(true);
 
     try {
       if (provider === 'google') {
@@ -39,12 +34,8 @@ export default function LoginScreen() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Giriş sırasında bir sorun oluştu.';
       setErrorMessage(message);
-    } finally {
-      setIsSubmitting(false);
     }
   };
-
-  const isBusy = isSubmitting || isLoading;
 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
@@ -63,13 +54,14 @@ export default function LoginScreen() {
           <Text style={styles.cardTitle}>Hızlı giriş yap</Text>
           <Text style={styles.cardSubtitle}>Sadece bir dokunuşla oyuna başla.</Text>
 
-          <Pressable style={styles.primaryButton} onPress={() => handleSocialLogin('google')} disabled={isBusy}>
-            {isBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Google ile Giriş Yap</Text>}
+          {/* 🎯 DÜZELTME: Buton kilitlemesi sadece Context'ten gelen isLoading'e bağlandı */}
+          <Pressable style={styles.primaryButton} onPress={() => handleSocialLogin('google')} disabled={isLoading}>
+            {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Google ile Giriş Yap</Text>}
           </Pressable>
 
           {Platform.OS === 'ios' ? (
-            <Pressable style={styles.secondaryButton} onPress={() => handleSocialLogin('apple')} disabled={isBusy}>
-              {isBusy ? <ActivityIndicator color="#f8fafc" /> : <Text style={styles.secondaryButtonText}>Apple ile Giriş Yap</Text>}
+            <Pressable style={styles.secondaryButton} onPress={() => handleSocialLogin('apple')} disabled={isLoading}>
+              {isLoading ? <ActivityIndicator color="#f8fafc" /> : <Text style={styles.secondaryButtonText}>Apple ile Giriş Yap</Text>}
             </Pressable>
           ) : null}
 
@@ -88,7 +80,7 @@ const styles = StyleSheet.create({
     width: 92,
     height: 92,
     borderRadius: 28,
-    backgroundColor: '#8b5cf6', // Çökmeyi engellemek için düz mor renge çekildi
+    backgroundColor: '#8b5cf6',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,

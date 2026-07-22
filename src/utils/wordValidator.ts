@@ -121,17 +121,19 @@ const BASE_DICTIONARY: string[] = [
   // const BASE_DICTIONARY = [...TURKISH_WORDS];
 ];
 
-const normalizedDictionary = new Set<string>([
-  ...POPULAR_WORDS.map(({ word }) => standardizeWord(word)),
-  ...BASE_DICTIONARY.map((word) => standardizeWord(word)),
-]);
-
 export const standardizeWord = (word: string): string => {
   return word
     .trim()
     .replace(/\s+/g, ' ')
     .toLocaleLowerCase('tr-TR');
 };
+
+const normalizedDictionary = new Set<string>([
+  ...POPULAR_WORDS.map(({ word }) => standardizeWord(word)),
+  ...BASE_DICTIONARY.map((word) => standardizeWord(word)),
+]);
+
+
 
 export const isValidTurkishWord = (word: string): boolean => {
   const normalized = standardizeWord(word);

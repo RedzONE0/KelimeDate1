@@ -1,12 +1,12 @@
 import React from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { NavigationContainer } from '@react-navigation/native'; // Köprüyü ekledik
+import { NavigationContainer } from '@react-navigation/native';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
-import LoginScreen from './src/screens/LoginScreen';
+import AppNavigator from './src/navigation/AppNavigator'; // ← Doğru yol neyse ona göre düzelt
 
 function RootNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -16,15 +16,15 @@ function RootNavigator() {
     );
   }
 
-  // LoginScreen artık bir NavigationContainer içinde olduğu için
-  // içindeki useNavigation() kancası hata vermeden çalışacaktır.
-  return <LoginScreen />;
+  // Artık isAuthenticated/isNewUser durumuna göre doğru ekranı
+  // AppNavigator kendi içinde seçecek (Login / ProfileSetup / Home vs.)
+  return <AppNavigator />;
 }
 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <NavigationContainer> 
+      <NavigationContainer>
         <AuthProvider>
           <RootNavigator />
         </AuthProvider>

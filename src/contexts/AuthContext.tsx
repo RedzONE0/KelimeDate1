@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+// src/contexts/AuthContext.tsx
+import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { Platform } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -23,112 +24,148 @@ const defaultAuthState: AuthState = {
   isNewUser: false,
 };
 
-// Girdi temizleme (Güvenlik) fonksiyonları
-const sanitizeText = (value: string, maxLength = 80): string => 
+const sanitizeText = (value: string, maxLength = 80): string =>
   value.replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
 
-const sanitizeStringArray = (values: string[]): string[] => 
+const sanitizeStringArray = (values: string[]): string[] =>
   Array.from(new Set(values.map((value) => sanitizeText(value, 40)).filter(Boolean)));
 
 GoogleSignin.configure({
-  webClientId: '681199810177-9pecsef70hbqpb2rafr9nhd8bh32gf1c.apps.googleusercontent.com' // Burası Firebase konsolundan alınacak
+  webClientId: '681199810177-9pecsef70hbqpb2rafr9nhd8bh32gf1c.apps.googleusercontent.com',
+  offlineAccess: true,
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>(defaultAuthState);
 
-  // Firebase kullanıcısını Kelimedate veri yapısına dönüştüren fonksiyon
-  const mapFirebaseUserToAppUser = async (firebaseUser: any): Promise<{ profile: User; isNewUser: boolean }> => {
-    const userDocRef = db.collection('users').doc(firebaseUser.uid);
-    const userSnapshot = await userDocRef.get();
-    
-    const firestoreData = userSnapshot.exists() ? userSnapshot.data() : {};
-    const isNewUser = !userSnapshot.exists();
-
-    const profile: User = {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email ?? '',
-      displayName: sanitizeText(firebaseUser.displayName ?? firestoreData?.displayName ?? 'Oyuncu', 40),
-      createdAt: firestoreData?.createdAt ?? new Date().toISOString(),
-      avatarId: firestoreData?.avatarId ?? 'avatar-1',
-      heightCm: firestoreData?.heightCm ?? null,
-      weightKg: firestoreData?.weightKg ?? null,
-      gender: (firestoreData?.gender as Gender | null) ?? null,
-      hobbies: sanitizeStringArray(firestoreData?.hobbies ?? []),
-      musicGenres: sanitizeStringArray(firestoreData?.musicGenres ?? []),
-      totalScore: firestoreData?.totalScore ?? 0,
-      gamesPlayed: firestoreData?.gamesPlayed ?? 0,
-      gamesWon: firestoreData?.gamesWon ?? 0,
-      isOnline: true,
-      blockedUsers: firestoreData?.blockedUsers ?? []
-    };
-
-    // Kullanıcı ilk defa geliyorsa veya profilini güncelliyorsa her girişte son giriş zamanını sunucu saatiyle kaydediyoruz
-    await userDocRef.set({
-      ...profile,
-      lastLogin: firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
-
-    return { profile, isNewUser };
-  };
-
-  // Oturum durumunu dinleyen mekanizma
   useEffect(() => {
-    const unsubscribe = firebaseAuth.onAuthStateChanged(async (firebaseUser: any) => {
+    console.log('🟢 LISTENER KURULDU');
+    const unsubscribe = firebaseAuth.onAuthStateChanged(async (firebaseUser) => {
+      console.log('🟡 TETİKLENDİ! firebaseUser:', firebaseUser ? firebaseUser.uid : 'NULL');
       if (firebaseUser) {
         try {
-          const { profile, isNewUser } = await mapFirebaseUserToAppUser(firebaseUser);
-          setAuthState({ user: profile, isAuthenticated: true, isLoading: false, isNewUser });
+          console.log('🟡 Firestore get() çağrılıyor...');
+          const userDocRef = db.collection('users').doc(firebaseUser.uid);
+          const userDoc = await userDocRef.get();
+          console.log('🟢 Firestore get() TAMAMLANDI. exists:', userDoc.exists());
+
+          let isNewData = false;
+          let firestoreData = userDoc.exists() ? userDoc.data() : null;
+
+          if (!userDoc.exists()) {
+            isNewData = true;
+            firestoreData = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email ?? '',
+              displayName: sanitizeText(firebaseUser.displayName ?? 'Oyuncu', 40),
+              createdAt: new Date().toISOString(),
+              avatarId: 'avatar-1',
+              heightCm: null,
+              weightKg: null,
+              gender: null,
+              hobbies: [],
+              musicGenres: [],
+              totalScore: 0,
+              gamesPlayed: 0,
+              gamesWon: 0,
+              isOnline: true,
+              blockedUsers: [],
+            };
+            console.log('🟡 Firestore set() (yeni kullanıcı) çağrılıyor...');
+            await userDocRef.set(firestoreData);
+            console.log('🟢 Firestore set() TAMAMLANDI');
+          } else {
+            console.log('🟡 Firestore update() çağrılıyor...');
+            try {
+              await userDocRef.update({
+                isOnline: true,
+                lastLogin: firestore.FieldValue.serverTimestamp(),
+              });
+              console.log('🟢 Firestore update() TAMAMLANDI');
+            } catch (updateError) {
+              console.error('🔴 Firestore update() HATA VERDİ:', updateError);
+              throw updateError;
+            }
+          }
+
+          console.log('🟡 Profile objesi oluşturuluyor...');
+          const profile: User = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email ?? '',
+            displayName: sanitizeText(firebaseUser.displayName ?? firestoreData?.displayName ?? 'Oyuncu', 40),
+            createdAt: firestoreData?.createdAt ?? new Date().toISOString(),
+            avatarId: firestoreData?.avatarId ?? 'avatar-1',
+            heightCm: firestoreData?.heightCm ?? null,
+            weightKg: firestoreData?.weightKg ?? null,
+            gender: (firestoreData?.gender as Gender | null) ?? null,
+            hobbies: sanitizeStringArray(firestoreData?.hobbies ?? []),
+            musicGenres: sanitizeStringArray(firestoreData?.musicGenres ?? []),
+            totalScore: firestoreData?.totalScore ?? 0,
+            gamesPlayed: firestoreData?.gamesPlayed ?? 0,
+            gamesWon: firestoreData?.gamesWon ?? 0,
+            isOnline: true,
+            blockedUsers: firestoreData?.blockedUsers ?? [],
+          };
+
+          console.log('🟢 setAuthState ÇAĞRILIYOR (isAuthenticated: true, isLoading: false)');
+          setAuthState({
+            user: profile,
+            isAuthenticated: true,
+            isLoading: false,
+            isNewUser: isNewData,
+          });
         } catch (error) {
-          console.error('Oturum yüklenirken hata:', error);
+          console.error('🔴 Firestore profil yükleme hatası:', error);
           setAuthState({ user: null, isAuthenticated: false, isLoading: false, isNewUser: false });
         }
       } else {
+        console.log('🟡 setAuthState ÇAĞRILIYOR (firebaseUser NULL)');
         setAuthState({ user: null, isAuthenticated: false, isLoading: false, isNewUser: false });
       }
     });
 
-    return unsubscribe;
+    return () => unsubscribe();
   }, []);
 
-    const loginWithGoogle = async (): Promise<void> => {
-  setAuthState((prev) => ({ ...prev, isLoading: true }));
-  try {
-    if (Platform.OS === 'web') {
-      throw new Error('Google girişi bu platformda desteklenmiyor.');
+  const loginWithGoogle = async (): Promise<void> => {
+    setAuthState((prev) => ({ ...prev, isLoading: true }));
+    try {
+      if (Platform.OS === 'web') {
+        throw new Error('Google girişi bu platformda desteklenmiyor.');
+      }
+
+      await GoogleSignin.hasPlayServices();
+      const signInResult = await GoogleSignin.signIn();
+
+      const idToken = signInResult?.data?.idToken || (signInResult as any)?.idToken;
+
+      if (!idToken) {
+        throw new Error('Google idToken alınamadı. SHA-1 ve webClientId ayarlarını kontrol edin.');
+      }
+
+      const { accessToken } = await GoogleSignin.getTokens();
+
+      console.log('--- GOOGLE LOGIN DEBUG ---');
+      console.log('idToken:', idToken ? 'VAR' : 'YOK');
+      console.log('accessToken:', accessToken ? 'VAR' : 'YOK');
+
+      if (!accessToken) {
+        throw new Error('Google accessToken alınamadı. GoogleSignin.configure ayarlarını (webClientId, scopes) kontrol edin.');
+      }
+
+      const realCredential = auth.GoogleAuthProvider.credential(idToken, accessToken);
+
+      await firebaseAuth.signInWithCredential(realCredential);
+      console.log('🟢 signInWithCredential TAMAMLANDI');
+    } catch (error) {
+      console.error('Google login detaylı hatası:', error);
+      setAuthState((prev) => ({ ...prev, isLoading: false }));
+      throw error;
     }
 
-    await GoogleSignin.hasPlayServices();
-    const signInResult = await GoogleSignin.signIn();
+    
+  };
 
-    const idToken = signInResult?.data?.idToken;
-
-    if (!idToken) {
-      throw new Error('Google identity token (idToken) boş döndü! webClientId / SHA-1 kontrol et.');
-    }
-
-    // 🎯 Gerçek accessToken'ı ayrıca çek
-    const { accessToken } = await GoogleSignin.getTokens();
-
-    console.log('idToken:', idToken, 'accessToken:', accessToken);
-
-    if (!accessToken) {
-      throw new Error('accessToken boş döndü! Google Cloud Console > OAuth consent screen / scopes kontrol et.');
-    }
-
-    // 🎯 İkisini birden ver
-    const credential = auth.GoogleAuthProvider.credential(idToken, accessToken);
-
-    await firebaseAuth.signInWithCredential(credential);
-  } catch (error) {
-    console.error('Google login detaylı hatası:', error);
-    throw error;
-  } finally {
-    setAuthState((prev) => ({ ...prev, isLoading: false }));
-  }
-};
-
-  // Apple ile Giriş Fonksiyonu
   const loginWithApple = async (): Promise<void> => {
     setAuthState((prev) => ({ ...prev, isLoading: true }));
     try {
@@ -153,19 +190,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await firebaseAuth.signInWithCredential(credential);
     } catch (error) {
       console.error('Apple login hatası:', error);
-      throw error;
-    } finally {
       setAuthState((prev) => ({ ...prev, isLoading: false }));
+      throw error;
     }
   };
 
-  // Çıkış Yapma Fonksiyonu
   const signOut = async (): Promise<void> => {
     try {
       if (authState.user) {
-        // Çıkış yaparken kullanıcının online durumunu kapatıyoruz
         await db.collection('users').doc(authState.user.uid).update({
-          isOnline: false
+          isOnline: false,
         });
       }
       await firebaseAuth.signOut();
@@ -174,33 +208,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Profil Verilerini Güncelleme Fonksiyonu (Boy, Kilo, Cinsiyet, Hobi vb.)
   const updateProfileData = async (profileData: Partial<User>): Promise<void> => {
-    if (!authState.user) throw new Error('Kullanıcı oturum açmamış.');
+  if (!authState.user) throw new Error('Kullanıcı oturum açmamış.');
 
-    const activeUid = firebaseAuth.currentUser?.uid;
-    if (!activeUid || activeUid !== authState.user.uid) {
-      throw new Error('Güvenlik/Yetkilendirme hatası.');
-    }
+  const activeUid = firebaseAuth.currentUser?.uid;
+  if (!activeUid || activeUid !== authState.user.uid) {
+    throw new Error('Güvenlik/Yetkilendirme hatası.');
+  }
 
-    const sanitizedProfileData: Partial<User> = { ...profileData };
-    if (typeof sanitizedProfileData.displayName === 'string') {
-      sanitizedProfileData.displayName = sanitizeText(sanitizedProfileData.displayName, 40);
-    }
-    if (Array.isArray(sanitizedProfileData.hobbies)) {
-      sanitizedProfileData.hobbies = sanitizeStringArray(sanitizedProfileData.hobbies);
-    }
-    if (Array.isArray(sanitizedProfileData.musicGenres)) {
-      sanitizedProfileData.musicGenres = sanitizeStringArray(sanitizedProfileData.musicGenres);
-    }
+  const sanitizedProfileData: Partial<User> = { ...profileData };
+  if (typeof sanitizedProfileData.displayName === 'string') {
+    sanitizedProfileData.displayName = sanitizeText(sanitizedProfileData.displayName, 40);
+  }
+  if (Array.isArray(sanitizedProfileData.hobbies)) {
+    sanitizedProfileData.hobbies = sanitizeStringArray(sanitizedProfileData.hobbies);
+  }
+  if (Array.isArray(sanitizedProfileData.musicGenres)) {
+    sanitizedProfileData.musicGenres = sanitizeStringArray(sanitizedProfileData.musicGenres);
+  }
 
-    await db.collection('users').doc(authState.user.uid).set(sanitizedProfileData, { merge: true });
+  await db.collection('users').doc(authState.user.uid).set(sanitizedProfileData, { merge: true });
 
-    setAuthState((prev) => ({
-      ...prev,
-      user: prev.user ? { ...prev.user, ...sanitizedProfileData } : null,
-    }));
-  };
+  // 🎯 isNewUser'ı false yapıyoruz ki AppNavigator artık Home'a geçsin
+  setAuthState((prev) => ({
+    ...prev,
+    user: prev.user ? { ...prev.user, ...sanitizedProfileData } : null,
+    isNewUser: false,
+  }));
+};
 
   const value = useMemo<AuthContextValue>(
     () => ({
