@@ -1,4 +1,3 @@
-// src/screens/ChatScreen.tsx (PARÇA 1)
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, FlatList, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, Image, ActivityIndicator } from 'react-native';
@@ -8,7 +7,7 @@ import { db } from '../services/firebaseConfig';
 import { sendMessage, subscribeToMessages } from '../services/chatService';
 import { getAvatarById } from '../constants/avatars';
 import { ChatMessage, ChatRoom } from '../types';
-
+ 
 export default function ChatScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -16,26 +15,26 @@ export default function ChatScreen() {
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(16)).current;
-
+ 
   const [activeTab, setActiveTab] = useState<'group' | 'private'>(route.params?.initialTab ?? 'group');
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageText, setMessageText] = useState('');
   const [loadingRooms, setLoadingRooms] = useState(true);
   const [currentRoomId, setCurrentRoomId] = useState<string>(route.params?.initialRoomId ?? 'general-lobby');
-
+ 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 650, easing: Easing.out(Easing.quad), useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, tension: 45, friction: 10, useNativeDriver: true }),
     ]).start();
   }, [fadeAnim, slideAnim]);
-
+ 
   // Lobi odalarını dinleme sorgusu
   useEffect(() => {
     if (!user?.uid) return;
     setLoadingRooms(true);
-
+ 
     // 🎯 PERFORMANS: canlı sorguları artık limitliyoruz (eskiden tüm grup odaları sürekli akıyordu).
     let query;
     if (activeTab === 'group') {
@@ -49,21 +48,21 @@ export default function ChatScreen() {
         .where('participants', 'array-contains', user.uid)
         .limit(30);
     }
-
+ 
     const unsubscribe = query.onSnapshot((snapshot) => {
       const loadedRooms: ChatRoom[] = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data()
       } as ChatRoom));
-
+ 
       loadedRooms.sort((a, b) => {
         const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
         const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
         return timeB - timeA;
       });
-
+ 
       setRooms(loadedRooms);
-
+ 
       // Seçili oda hala listedeyse koru; değilse ilk odayı seç (parıl parıl seçim sıfırlanmasını önler).
       if (loadedRooms.length > 0) {
         setCurrentRoomId((prev) => (loadedRooms.some((r) => r.id === prev) ? prev : loadedRooms[0].id));
@@ -75,7 +74,7 @@ export default function ChatScreen() {
       console.error("Odalar dinlenirken hata:", error);
       setLoadingRooms(false);
     });
-
+ 
     return () => unsubscribe();
   }, [activeTab, user?.uid]);
   
@@ -85,20 +84,20 @@ export default function ChatScreen() {
       setMessages([]);
       return;
     }
-
+ 
     const unsubscribe = subscribeToMessages(currentRoomId, (nextMessages) => {
       setMessages(nextMessages);
     });
-
+ 
     return unsubscribe;
   }, [currentRoomId]);
-
+ 
   const handleSendMessage = async () => {
     const trimmedText = messageText.trim();
     if (!trimmedText || !user || !currentRoomId) return;
-
+ 
     setMessageText('');
-
+ 
     try {
       await sendMessage({
         chatId: currentRoomId,
@@ -111,14 +110,14 @@ export default function ChatScreen() {
       console.error("Mesaj servisinde hata:", error);
     }
   };
-
+ 
   const handleStartNewPrivateChat = () => {
     if (!user) return;
     // Gerçek bir rakip seçmek için liderlik tablosuna yönlendiriyoruz
     // (eskiden sabit bir "test-player-99" DM odası açılıyordu).
     navigation.navigate('Leaderboard');
   };
-
+ 
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
       <SafeAreaView style={styles.safeArea}>
@@ -140,7 +139,7 @@ export default function ChatScreen() {
             {activeTab === 'group' ? 'Topluluk odalarında eğlenceye katıl' : 'Rakiplerinle birebir flört et'}
           </Text>
         </View>
-
+ 
         <View style={styles.tabRow}>
           <Pressable 
             style={[styles.tabButton, activeTab === 'group' && styles.tabButtonActive]}
@@ -155,7 +154,7 @@ export default function ChatScreen() {
             <Text style={[styles.tabText, activeTab === 'private' && styles.tabTextActive]}>Özel Mesajlar</Text>
           </Pressable>
         </View>
-
+ 
         {/* 🎛️ ODALARIN YATAY ŞERİDİ (LOBİLER) - GÜVENLİK FİLTRELİ SÜRÜM */}
         <View style={styles.roomsWrapper}>
           {loadingRooms ? (
@@ -174,7 +173,7 @@ export default function ChatScreen() {
                 }
                 return true;
               });
-
+ 
               return (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.roomsScroll}>
                   {visibleRooms.map((room) => {
@@ -204,7 +203,7 @@ export default function ChatScreen() {
             })()
           )}
         </View>
-
+ 
         <FlatList
           style={styles.messageList}
           contentContainerStyle={styles.messageListContent}
@@ -236,7 +235,7 @@ export default function ChatScreen() {
             <Text style={styles.noMessagesText}>Bu odada henüz konuşma geçmedi. İlk mesajı sen at! 🌟</Text>
           ) : null}
         />
-
+ 
         <View style={styles.inputRow}>
           <TextInput
             style={styles.input}

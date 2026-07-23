@@ -1,20 +1,20 @@
 rules_version = '2';
-
+ 
 // KelimeDate Firestore güvenlik kuralları.
 // Not: Oyun puanları istemci tarafında hesaplanıp yazıldığı için tam hile
 // koruması için puanların bir Cloud Function üzerinden yazılması önerilir.
 // Aşağıdaki kurallar en azından "sadece kendi verini yaz" ilkesini uygular.
 service cloud.firestore {
   match /databases/{database}/documents {
-
+ 
     function isSignedIn() {
       return request.auth != null;
     }
-
+ 
     function isSelf(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
-
+ 
     // Kullanıcı profilleri: herkes (giriş yapmış) okuyabilir (liderlik/DM için),
     // ama yalnızca kişi kendi dokümanını yazabilir.
     match /users/{userId} {
@@ -22,7 +22,7 @@ service cloud.firestore {
       allow create, update: if isSelf(userId);
       allow delete: if false;
     }
-
+ 
     // Maç kayıtları: giriş yapmış kullanıcılar okuyabilir; yalnızca katılımcı
     // olduğun bir maç oluşturabilirsin. Güncelleme/silme kapalı.
     match /matches/{matchId} {
@@ -31,12 +31,12 @@ service cloud.firestore {
         && request.auth.uid in request.resource.data.participants;
       allow update, delete: if false;
     }
-
+ 
     // Sohbet odaları ve mesajları
     match /chatRooms/{roomId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn();
-
+ 
       match /messages/{messageId} {
         allow read: if isSignedIn();
         // Mesajı yalnızca gönderen kişi kendi adına oluşturabilir.
@@ -45,14 +45,14 @@ service cloud.firestore {
         allow update, delete: if false;
       }
     }
-
+ 
     // Kelime Zinciri eşleştirme kuyruğu (kısa ömürlü).
     // Eşleştirme transaction'ı rakibin kuyruk kaydını da güncellediği için
     // giriş yapmış kullanıcılara okuma/yazma izni veriyoruz.
     match /wordChainQueue/{uid} {
       allow read, write: if isSignedIn();
     }
-
+ 
     // Aktif Kelime Zinciri maçları: yalnızca maçtaki oyuncular erişebilir.
     match /wordChainMatches/{matchId} {
       allow read: if isSignedIn();
@@ -61,7 +61,7 @@ service cloud.firestore {
         && request.auth.uid in resource.data.players.keys();
       allow delete: if false;
     }
-
+ 
     // Kelime havuzu / liderlik yardımcı koleksiyonları: sadece okuma.
     match /guessWords/{docId} {
       allow read: if isSignedIn();

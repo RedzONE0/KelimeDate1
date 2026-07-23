@@ -4,32 +4,32 @@ import { Animated, Easing, FlatList, Pressable, StatusBar, StyleSheet, Text, Vie
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { collections } from '../services/firebaseConfig';
-
+ 
 type MatchItem = { id: string; title: string; result: string; points: number; createdAt: any };
-
+ 
 export default function MatchHistoryScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const [matches, setMatches] = useState<MatchItem[]>([]);
   const [screenLoading, setScreenLoading] = useState(true); // Siber veriler yüklenirken spinner göstermek için
-
+ 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(16)).current;
-
+ 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 650, easing: Easing.out(Easing.quad), useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, tension: 45, friction: 10, useNativeDriver: true }),
     ]).start();
   }, [fadeAnim, slideAnim]);
-
+ 
   useEffect(() => {
     if (!user) {
       setMatches([]);
       setScreenLoading(false);
       return;
     }
-
+ 
     const col = collections.matches().where('participants', 'array-contains', user.uid).orderBy('createdAt', 'desc').limit(50);
     
     const unsub = col.onSnapshot((snapshot: any) => {
@@ -39,7 +39,7 @@ export default function MatchHistoryScreen() {
         setScreenLoading(false);
         return;
       }
-
+ 
       const items: MatchItem[] = snapshot.docs.map((d: any) => {
         const data = d.data() as any;
         return {
@@ -57,10 +57,10 @@ export default function MatchHistoryScreen() {
       console.error("Geçmiş maçlar snapshot hatası:", error);
       setScreenLoading(false);
     });
-
+ 
     return () => unsub();
   }, [user?.uid]);
-
+ 
   const renderMatch = ({ item: mac }: { item: MatchItem }) => {
     // Maç sonucuna göre dinamik neon renk tespiti
     const isWin = ['kazandın', 'galibiyet', 'win', 'kazandi'].includes(mac.result.toLowerCase().trim());
@@ -123,7 +123,7 @@ return (
     </Animated.View>
   );
 }
-
+ 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#060816' },
   safeArea: { flex: 1 },
@@ -140,11 +140,11 @@ const styles = StyleSheet.create({
   matchMeta: { alignItems: 'flex-end', justifyContent: 'center' },
   matchResult: { fontWeight: '800', fontSize: 14, letterSpacing: 0.5 },
   matchScore: { fontSize: 12, marginTop: 4, fontWeight: '700' },
-
+ 
   // Yüklenme ve Orta Kutu Tasarımları
   centerBox: { marginTop: 60, alignItems: 'center', justifyContent: 'center' },
   loadingText: { color: '#8b5cf6', fontSize: 13, marginTop: 12, fontWeight: '700', letterSpacing: 1 },
-
+ 
   // Fütüristik Boş Durum (Empty State) Stilleri
   emptyCard: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 24, padding: 24, alignItems: 'center', marginTop: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
   emptyIcon: { fontSize: 40, marginBottom: 12, color: '#8b5cf6' },

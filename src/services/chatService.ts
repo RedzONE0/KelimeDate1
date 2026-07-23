@@ -12,7 +12,7 @@ const BAD_WORDS = ['abaza','abazan','ag','ağzına sıçayım','ahmak','allah','
 
 // Regex özel karakterlerini kaçır (kelimeler kullanıcı listesinden geliyor)
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
+ 
 // 🎯 PERFORMANS: Tüm kötü kelimeler için TEK bir regex'i modül yüklenirken bir kez derliyoruz.
 // Eskiden her mesajda ~700 adet RegExp yeniden derleniyordu.
 // Uzun kelimeler önce gelsin ki alternasyon en uzun eşleşmeyi yakalasın.
@@ -20,10 +20,10 @@ const BAD_WORDS_REGEX = new RegExp(
   '(' + [...BAD_WORDS].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|') + ')',
   'gi'
 );
-
+ 
 // Türkçe harf sınır kontrolü — "bayram" içindeki "am" gibi masum eşleşmeleri elemek için.
 const LETTER_RE = /[a-zA-ZçÇğĞıİöÖşŞüÜâîûÂÎÛ]/;
-
+ 
 /**
  * Mesaj içindeki kötü kelimeleri yakalayıp yıldızlayan (***) filtre fonksiyonu.
  * Kelime sınırı kontrolü sayesinde masum kelimelerin içindeki alt dizeler sansürlenmez.
@@ -38,7 +38,7 @@ export const filterBadWords = (text: string): string => {
     return '***';
   });
 };
-
+ 
 export interface SendMessagePayload {
   chatId: string;
   senderUid: string;
@@ -46,17 +46,17 @@ export interface SendMessagePayload {
   text: string;
   avatarId: string; // Fütüristik avatarı basmak için can damarı
 }
-
+ 
 /**
  * 🎯 Yeni bir Grup/Topluluk odası oluşturur (Lobi vb.)
  */
 export const createChatRoom = async (roomName: string, description: string): Promise<string> => {
   const activeUid = auth.currentUser?.uid;
   if (!activeUid) throw new Error('Yetkilendirme hatası.');
-
+ 
   const safeName = sanitizeText(roomName, 40) || 'Genel Sohbet';
   const safeDescription = sanitizeText(description, 160);
-
+ 
   const roomRef = await db.collection(CHAT_ROOMS_COLLECTION).add({
     ownerUid: activeUid,
     name: safeName,
@@ -69,25 +69,25 @@ export const createChatRoom = async (roomName: string, description: string): Pro
     lastMessage: 'Oda oluşturuldu!',
     lastMessageAt: new Date().toISOString(),
   });
-
+ 
   return roomRef.id;
 };
-
+ 
 /**
  * 🎯 İki oyuncu arasında Birebir Özel Mesajlaşma (DM) Odası Başlatır
  */
 export const createPrivateChatRoom = async (partnerUid: string, partnerName: string, partnerAvatarId: string): Promise<string> => {
   const currentUser = auth.currentUser;
   if (!currentUser?.uid) throw new Error('Yetkilendirme hatası.');
-
+ 
   // Çakışmayı önlemek için iki benzersiz UID'yi alfabetik sıralayıp özel bir oda ID'si üretiyoruz
   const roomId = currentUser.uid < partnerUid 
     ? `dm_${currentUser.uid}_${partnerUid}` 
     : `dm_${partnerUid}_${currentUser.uid}`;
-
+ 
   const roomRef = db.collection(CHAT_ROOMS_COLLECTION).doc(roomId);
   const roomSnap = await roomRef.get();
-
+ 
   // Oda daha önce kurulmadıysa sıfırdan kuruyoruz
   if (!roomSnap.exists()) {
     await roomRef.set({
@@ -107,42 +107,52 @@ export const createPrivateChatRoom = async (partnerUid: string, partnerName: str
       lastMessageAt: new Date().toISOString()
     });
   }
-
+ 
   return roomId;
 };
-
+ 
 /**
  * 🎯 Seçili odanın içindeki mesajları CANLI (real-time) dinler (Subcollection Mimarisi)
  */
 export const subscribeToMessages = (chatId: string, callback: (messages: ChatMessage[]) => void): (() => void) => {
-  // Mesajları odanın altındaki 'messages' alt koleksiyonundan çekerek performansı uçuruyoruz
   const q = db.collection(CHAT_ROOMS_COLLECTION)
     .doc(chatId)
     .collection('messages')
     .orderBy('createdAt', 'asc')
     .limitToLast(50);
 
-  const unsub = q.onSnapshot((snapshot) => {
-    const messages = snapshot.docs.map((docSnapshot) => {
-      const data = docSnapshot.data();
-      return {
-        id: docSnapshot.id,
-        chatId: data.chatId ?? chatId,
-        senderUid: data.senderUid ?? 'system',
-        senderName: sanitizeText(data.senderName ?? 'Sistem', 40),
-        senderAvatarId: data.senderAvatarId ?? 'avatar-1', // 🎯 DÜZELTME: Avatar eklendi
-        text: sanitizeText(data.text ?? '', 500),
-        createdAt: data.createdAt ?? new Date().toISOString(),
-        isSystemMessage: data.isSystemMessage ?? false,
-      } satisfies ChatMessage;
-    });
+  const unsub = q.onSnapshot(
+    (snapshot) => {
+      if (!snapshot || !snapshot.docs) {
+        callback([]);
+        return;
+      }
 
-    callback(messages);
-  });
+      const messages = snapshot.docs.map((docSnapshot) => {
+        const data = docSnapshot.data();
+        return {
+          id: docSnapshot.id,
+          chatId: data.chatId ?? chatId,
+          senderUid: data.senderUid ?? 'system',
+          senderName: sanitizeText(data.senderName ?? 'Sistem', 40),
+          senderAvatarId: data.senderAvatarId ?? 'avatar-1',
+          text: sanitizeText(data.text ?? '', 500),
+          createdAt: data.createdAt ?? new Date().toISOString(),
+          isSystemMessage: data.isSystemMessage ?? false,
+        } satisfies ChatMessage;
+      });
+
+      callback(messages);
+    },
+    (error) => {
+      console.error('subscribeToMessages hata:', error);
+      callback([]);
+    }
+  );
 
   return unsub;
 };
-
+ 
 /**
  * 🎯 Hile Korumalı Mesaj Gönderme Fonksiyonu
  */
@@ -151,18 +161,18 @@ export const sendMessage = async (payload: SendMessagePayload): Promise<void> =>
   if (!activeUid || activeUid !== payload.senderUid) {
     throw new Error('Yetkilendirme hatası.');
   }
-
+ 
   const safeText = sanitizeText(payload.text, 500);
   const cleanText = filterBadWords(safeText); // 🎯 KÖTÜ KELİME FİLTRESİ DEVREDE!
   const safeName = sanitizeText(payload.senderName, 40);
   const timeStamp = new Date().toISOString();
-
+ 
   const roomRef = db.collection(CHAT_ROOMS_COLLECTION).doc(payload.chatId);
   const messageRef = roomRef.collection('messages').doc();
-
+ 
   // İki yazımı tek atomik batch içinde yapıyoruz: ya ikisi de olur ya da hiçbiri.
   const batch = db.batch();
-
+ 
   // 1. Mesajı odanın altındaki güvenli alt koleksiyona (subcollection) yazıyoruz
   batch.set(messageRef, {
     chatId: payload.chatId,
@@ -173,14 +183,14 @@ export const sendMessage = async (payload: SendMessagePayload): Promise<void> =>
     createdAt: timeStamp,
     isSystemMessage: false,
   });
-
+ 
   // 2. Ana odayı güncelliyoruz (Lobi listesinde anlık 'Son Mesaj' güncellensin diye)
   // Önizlemede de filtrelenmiş metni gösteriyoruz (eskiden ham metin gidiyordu).
   batch.set(roomRef, {
     lastMessage: `${safeName}: ${cleanText}`,
     lastMessageAt: timeStamp
   }, { merge: true });
-
+ 
   await batch.commit();
 };
 
