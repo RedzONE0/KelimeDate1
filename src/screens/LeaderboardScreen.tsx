@@ -1,8 +1,9 @@
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StatusBar, StyleSheet, Text, View, Image, ActivityIndicator, Dimensions } from 'react-native';
+import { Animated, Easing, FlatList, Pressable, StatusBar, StyleSheet, Text, View, Image, ActivityIndicator, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { collections, db } from '../services/firebaseConfig';
+import { createPrivateChatRoom } from '../services/chatService';
 import { getAvatarById } from '../constants/avatars'; 
 import { useAuth } from '../contexts/AuthContext';
 import { User } from '../types';
@@ -27,43 +28,47 @@ export default function LeaderboardScreen() {
     ]).start();
   }, [fadeAnim, slideAnim]);
 
+  // 🎯 1. ADIM: En yüksek puanlı ilk 100 gerçek kullanıcıyı canlı dinliyoruz
+  // (kullanıcı nesnesine bağlı değil; yalnızca bir kez kurulur)
   useEffect(() => {
-    // 🎯 1. ADIM: En yüksek puanlı ilk 100 gerçek kullanıcıyı canlı dinliyoruz
     const col = collections.users().orderBy('totalScore', 'desc').limit(100);
-    
-    const unsub = col.onSnapshot(async (snapshot: any) => {
+
+    const unsub = col.onSnapshot((snapshot: any) => {
       if (!snapshot || !snapshot.docs) {
         setLoading(false);
         return;
       }
-
-      const items: User[] = snapshot.docs.map((d: any) => {
-        return { uid: d.id, ...d.data() } as User;
-      });
+      const items: User[] = snapshot.docs.map((d: any) => ({ uid: d.id, ...d.data() } as User));
       setPlayers(items);
-
-      // 🎯 2. ADIM: 502. Sıra Sihri! Puanı aktif kullanıcıdan yüksek olan kaç kişi var saydırıyoruz
-      if (user?.totalScore != null) {
-        try {
-          const countSnapshot = await db.collection('users')
-            .where('totalScore', '>', user.totalScore)
-            .get();
-
-          // Üstteki kişi sayısı + 1 = Kullanıcının dünyadaki net lig sırası!
-          setMyExactRank(countSnapshot.docs.length + 1);
-        } catch (e) {
-          console.error("Sıralama hesabı hatası:", e);
-        }
-      }
-      
       setLoading(false);
     }, (error) => {
       console.error("Skor tablosu çekilemedi:", error);
       setLoading(false);
     });
-    
+
     return () => unsub();
-  }, [user]);
+  }, []);
+
+  // 🎯 2. ADIM: 502. Sıra Sihri! Puanı aktif kullanıcıdan yüksek olan kaç kişi var saydırıyoruz.
+  // Tüm dokümanları çekmek yerine sunucu taraflı aggregation count() kullanıyoruz (maliyet + performans).
+  useEffect(() => {
+    if (user?.totalScore == null) return;
+    let active = true;
+
+    (async () => {
+      try {
+        const countSnapshot = await db.collection('users')
+          .where('totalScore', '>', user.totalScore)
+          .count()
+          .get();
+        if (active) setMyExactRank(countSnapshot.data().count + 1);
+      } catch (e) {
+        console.error("Sıralama hesabı hatası:", e);
+      }
+    })();
+
+    return () => { active = false; };
+  }, [user?.totalScore]);
 
   // 👤 Senin harika avatar ve online noktası basan bileşenin (Aynen korundu)
   const renderPlayerAvatar = (avatarId: string, isOnline: boolean, size = 44) => {
@@ -78,6 +83,84 @@ export default function LeaderboardScreen() {
       </View>
     );
   };
+  // Bir oyuncuya dokununca onunla birebir DM odası açıp sohbete yönlendiriyoruz.
+  const openDmWith = async (p: User) => {
+    if (!user || !p?.uid || p.uid === user.uid) return;
+    try {
+      const roomId = await createPrivateChatRoom(p.uid, p.displayName || 'Oyuncu', p.avatarId || 'avatar-1');
+      navigation.navigate('Chat', { initialRoomId: roomId, initialTab: 'private' });
+    } catch (e) {
+      console.error('DM odası açılamadı:', e);
+    }
+  };
+
+  const renderRow = ({ item: p, index }: { item: User; index: number }) => {
+    const currentRank = index + 4;
+    const isMe = user?.uid === p.uid; // Listedeki satır bana mı ait kontrolü kanka
+    const isTop10 = currentRank <= 10; // İlk 10 şatafatı için
+    return (
+      <Pressable
+        onPress={() => openDmWith(p)}
+        style={[
+          styles.playerRow,
+          isMe && styles.myRowAnchor, // 🎯 Kendini şak diye bulman için Neon Cyan çizgisi!
+          isTop10 && !isMe && styles.top10Border // İlk 10'a özel siber hat çizgisi
+        ]}
+      >
+        <Text style={[styles.rank, isMe && { color: '#67e8f9' }, isTop10 && !isMe && { color: '#fbbf24' }]}>
+          #{currentRank}
+        </Text>
+        {renderPlayerAvatar(p.avatarId, p.isOnline, 42)}
+        <Text style={[styles.playerName, isMe && { color: '#67e8f9' }]} numberOfLines={1}>
+          {p.displayName} {isMe ? ' (Sen)' : ''}
+        </Text>
+        <Text style={[styles.playerScore, isMe && { color: '#67e8f9' }]}>
+          {p.totalScore.toLocaleString()} Puan
+        </Text>
+      </Pressable>
+    );
+  };
+
+  const ListHeader = (
+    <View>
+      <Pressable style={styles.backButton} onPress={() => navigation.navigate('Home')}>
+        <Text style={styles.backText}>← Ana Sayfa</Text>
+      </Pressable>
+
+      <Text style={styles.title}>Liderlik Tablosu</Text>
+      <Text style={styles.subtitle}>Kelimedate'in en yüksek puanlı oyuncuları</Text>
+
+      {/* 🏆 PODYUM ALANI (İLK 3 OYUNCU) */}
+      <View style={styles.podiumCard}>
+        {/* 🥇 1. OLAN ŞAMPİYON OYUNCU (Şatafat Artırıldı) */}
+        <Pressable onPress={() => players[0] && openDmWith(players[0])} style={[styles.firstPlace, user?.uid === players[0]?.uid && styles.myHighlightedCard]}>
+          <Text style={styles.podiumBadge}>🥇 1</Text>
+          {renderPlayerAvatar(players[0]?.avatarId, players[0]?.isOnline, 64)}
+          <Text style={styles.podiumName} numberOfLines={1}>{players[0]?.displayName ?? '—'}</Text>
+          <Text style={styles.podiumScore}>{(players[0]?.totalScore ?? 0).toLocaleString()} Puan</Text>
+        </Pressable>
+
+        <View style={styles.row}>
+          {/* 🥈 2. OLAN OYUNCU */}
+          <Pressable onPress={() => players[1] && openDmWith(players[1])} style={[styles.secondPlace, user?.uid === players[1]?.uid && styles.myHighlightedCard_sub]}>
+            <Text style={styles.podiumBadge_sub}>🥈 2</Text>
+            {renderPlayerAvatar(players[1]?.avatarId, players[1]?.isOnline, 50)}
+            <Text style={styles.podiumName} numberOfLines={1}>{players[1]?.displayName ?? '—'}</Text>
+            <Text style={styles.podiumScore}>{(players[1]?.totalScore ?? 0).toLocaleString()} Puan</Text>
+          </Pressable>
+
+          {/* 🥉 3. OLAN OYUNCU */}
+          <Pressable onPress={() => players[2] && openDmWith(players[2])} style={[styles.thirdPlace, user?.uid === players[2]?.uid && styles.myHighlightedCard_sub]}>
+            <Text style={styles.podiumBadge_sub}>🥉 3</Text>
+            {renderPlayerAvatar(players[2]?.avatarId, players[2]?.isOnline, 50)}
+            <Text style={styles.podiumName} numberOfLines={1}>{players[2]?.displayName ?? '—'}</Text>
+            <Text style={styles.podiumScore}>{(players[2]?.totalScore ?? 0).toLocaleString()} Puan</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+
   return (
     <Animated.View style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
       <SafeAreaView style={styles.safeArea}>
@@ -89,76 +172,20 @@ export default function LeaderboardScreen() {
           </View>
         ) : (
           <View style={{ flex: 1 }}>
-            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-              <Pressable style={styles.backButton} onPress={() => navigation.navigate('Home')}>
-                <Text style={styles.backText}>← Ana Sayfa</Text>
-              </Pressable>
-
-              <Text style={styles.title}>Liderlik Tablosu</Text>
-              <Text style={styles.subtitle}>Kelimedate'in en yüksek puanlı oyuncuları</Text>
-
-              {/* 🏆 PODYUM ALANI (İLK 3 OYUNCU) */}
-              <View style={styles.podiumCard}>
-                {/* 🥇 1. OLAN ŞAMPİYON OYUNCU (Şatafat Artırıldı) */}
-                <View style={[styles.firstPlace, user?.uid === players[0]?.uid && styles.myHighlightedCard]}>
-                  <Text style={styles.podiumBadge}>🥇 1</Text>
-                  {renderPlayerAvatar(players[0]?.avatarId, players[0]?.isOnline, 64)}
-                  <Text style={styles.podiumName} numberOfLines={1}>{players[0]?.displayName ?? '—'}</Text>
-                  <Text style={styles.podiumScore}>{(players[0]?.totalScore ?? 0).toLocaleString()} Puan</Text>
-                </View>
-                
-                <View style={styles.row}>
-                  {/* 🥈 2. OLAN OYUNCU */}
-                  <View style={[styles.secondPlace, user?.uid === players[1]?.uid && styles.myHighlightedCard_sub]}>
-                    <Text style={styles.podiumBadge_sub}>🥈 2</Text>
-                    {renderPlayerAvatar(players[1]?.avatarId, players[1]?.isOnline, 50)}
-                    <Text style={styles.podiumName} numberOfLines={1}>{players[1]?.displayName ?? '—'}</Text>
-                    <Text style={styles.podiumScore}>{(players[1]?.totalScore ?? 0).toLocaleString()} Puan</Text>
-                  </View>
-                  
-                  {/* 🥉 3. OLAN OYUNCU */}
-                  <View style={[styles.thirdPlace, user?.uid === players[2]?.uid && styles.myHighlightedCard_sub]}>
-                    <Text style={styles.podiumBadge_sub}>🥉 3</Text>
-                    {renderPlayerAvatar(players[2]?.avatarId, players[2]?.isOnline, 50)}
-                    <Text style={styles.podiumName} numberOfLines={1}>{players[2]?.displayName ?? '—'}</Text>
-                    <Text style={styles.podiumScore}>{(players[2]?.totalScore ?? 0).toLocaleString()} Puan</Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* 📜 LİSTE ALANI (4. SIRADAN 100. SIRAYA KADAR) */}
-              {players.slice(3).map((p, index) => {
-                const currentRank = index + 4;
-                const isMe = user?.uid === p.uid; // Listedeki satır bana mı ait kontrolü kanka
-                const isTop10 = currentRank <= 10; // İlk 10 şatafatı için
-
-                return (
-                  <View 
-                    key={p.uid} 
-                    style={[
-                      styles.playerRow, 
-                      isMe && styles.myRowAnchor, // 🎯 Kendini şak diye bulman için Neon Cyan çizgisi!
-                      isTop10 && !isMe && styles.top10Border // İlk 10'a özel siber hat çizgisi
-                    ]}
-                  >
-                    <Text style={[styles.rank, isMe && { color: '#67e8f9' }, isTop10 && !isMe && { color: '#fbbf24' }]}>
-                      #{currentRank}
-                    </Text>
-                    {renderPlayerAvatar(p.avatarId, p.isOnline, 42)}
-                    <Text style={[styles.playerName, isMe && { color: '#67e8f9' }]} numberOfLines={1}>
-                      {p.displayName} {isMe ? ' (Sen)' : ''}
-                    </Text>
-                    <Text style={[styles.playerScore, isMe && { color: '#67e8f9' }]}>
-                      {p.totalScore.toLocaleString()} Puan
-                    </Text>
-                  </View>
-                );
-              })}
-              
-              {players.length === 0 && (
-                <Text style={styles.emptyText}>Henüz skor kaydı bulunamadı.</Text>
-              )}
-            </ScrollView>
+            {/* 📜 LİSTE ALANI (4. SIRADAN 100. SIRAYA KADAR) — sanallaştırılmış */}
+            <FlatList
+              data={players.slice(3)}
+              keyExtractor={(item) => item.uid}
+              renderItem={renderRow}
+              contentContainerStyle={styles.content}
+              showsVerticalScrollIndicator={false}
+              ListHeaderComponent={ListHeader}
+              ListEmptyComponent={
+                players.length === 0 ? (
+                  <Text style={styles.emptyText}>Henüz skor kaydı bulunamadı.</Text>
+                ) : null
+              }
+            />
 
             {/* 🎯 4. BÜYÜK VİZYON ADIMI: STICKY FOOTER (Kullanıcı 100'ün Gerisindeyse En Altta Yapışık Duran Panel) */}
             {myExactRank > 100 && (

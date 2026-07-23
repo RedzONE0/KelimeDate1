@@ -30,6 +30,19 @@ const sanitizeText = (value: string, maxLength = 80): string =>
 const sanitizeStringArray = (values: string[]): string[] =>
   Array.from(new Set(values.map((value) => sanitizeText(value, 40)).filter(Boolean)));
 
+// Gün anahtarı (YYYY-MM-DD, UTC) — seri hesabında tutarlılık için
+const dateKeyUTC = (d: Date): string => d.toISOString().slice(0, 10);
+
+// Ardışık gün serisini hesaplar: dün girildiyse +1, bugün zaten girildiyse aynı, aksi halde sıfırlanır (1).
+const computeStreak = (lastActiveDate: string | undefined, prevStreak: number | undefined): number => {
+  const today = dateKeyUTC(new Date());
+  if (!lastActiveDate) return 1;
+  if (lastActiveDate === today) return prevStreak && prevStreak > 0 ? prevStreak : 1;
+  const yesterday = dateKeyUTC(new Date(Date.now() - 24 * 60 * 60 * 1000));
+  if (lastActiveDate === yesterday) return (prevStreak ?? 0) + 1;
+  return 1;
+};
+
 GoogleSignin.configure({
   webClientId: '681199810177-9pecsef70hbqpb2rafr9nhd8bh32gf1c.apps.googleusercontent.com', // Firebase projenizden alınan webClientId
   offlineAccess: true,
@@ -39,87 +52,84 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authState, setAuthState] = useState<AuthState>(defaultAuthState);
 
   useEffect(() => {
-    console.log('🟢 LISTENER KURULDU');
     const unsubscribe = firebaseAuth.onAuthStateChanged(async (firebaseUser) => {
-      console.log('🟡 TETİKLENDİ! firebaseUser:', firebaseUser ? firebaseUser.uid : 'NULL');
-      if (firebaseUser) {
-        try {
-          console.log('🟡 Firestore get() çağrılıyor...');
-          const userDocRef = db.collection('users').doc(firebaseUser.uid);
-          const userDoc = await userDocRef.get();
-          console.log('🟢 Firestore get() TAMAMLANDI. exists:', userDoc.exists());
+      if (!firebaseUser) {
+        setAuthState({ user: null, isAuthenticated: false, isLoading: false, isNewUser: false });
+        return;
+      }
 
-          let isNewData = false;
-          let firestoreData = userDoc.exists() ? userDoc.data() : null;
+      try {
+        const userDocRef = db.collection('users').doc(firebaseUser.uid);
+        const userDoc = await userDocRef.get();
+        const todayKey = dateKeyUTC(new Date());
 
-          if (!userDoc.exists()) {
-            isNewData = true;
-            firestoreData = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email ?? '',
-              displayName: sanitizeText(firebaseUser.displayName ?? 'Oyuncu', 40),
-              createdAt: new Date().toISOString(),
-              avatarId: 'avatar-1',
-              heightCm: null,
-              weightKg: null,
-              gender: null,
-              hobbies: [],
-              musicGenres: [],
-              totalScore: 0,
-              gamesPlayed: 0,
-              gamesWon: 0,
-              isOnline: true,
-              blockedUsers: [],
-            };
-            console.log('🟡 Firestore set() (yeni kullanıcı) çağrılıyor...');
-            await userDocRef.set(firestoreData);
-            console.log('🟢 Firestore set() TAMAMLANDI');
-          } else {
-            console.log('🟡 Firestore update() çağrılıyor...');
-            try {
-              await userDocRef.update({
-                isOnline: true,
-                lastLogin: firestore.FieldValue.serverTimestamp(),
-              });
-              console.log('🟢 Firestore update() TAMAMLANDI');
-            } catch (updateError) {
-              console.error('🔴 Firestore update() HATA VERDİ:', updateError);
-              throw updateError;
-            }
-          }
+        let isNewData = false;
+        let firestoreData = userDoc.exists() ? userDoc.data() : null;
+        let streakCount = 1;
 
-          console.log('🟡 Profile objesi oluşturuluyor...');
-          const profile: User = {
+        if (!userDoc.exists()) {
+          isNewData = true;
+          firestoreData = {
             uid: firebaseUser.uid,
             email: firebaseUser.email ?? '',
-            displayName: sanitizeText(firebaseUser.displayName ?? firestoreData?.displayName ?? 'Oyuncu', 40),
-            createdAt: firestoreData?.createdAt ?? new Date().toISOString(),
-            avatarId: firestoreData?.avatarId ?? 'avatar-1',
-            heightCm: firestoreData?.heightCm ?? null,
-            weightKg: firestoreData?.weightKg ?? null,
-            gender: (firestoreData?.gender as Gender | null) ?? null,
-            hobbies: sanitizeStringArray(firestoreData?.hobbies ?? []),
-            musicGenres: sanitizeStringArray(firestoreData?.musicGenres ?? []),
-            totalScore: firestoreData?.totalScore ?? 0,
-            gamesPlayed: firestoreData?.gamesPlayed ?? 0,
-            gamesWon: firestoreData?.gamesWon ?? 0,
+            displayName: sanitizeText(firebaseUser.displayName ?? 'Oyuncu', 40),
+            createdAt: new Date().toISOString(),
+            avatarId: 'avatar-1',
+            heightCm: null,
+            weightKg: null,
+            gender: null,
+            hobbies: [],
+            musicGenres: [],
+            totalScore: 0,
+            gamesPlayed: 0,
+            gamesWon: 0,
             isOnline: true,
-            blockedUsers: firestoreData?.blockedUsers ?? [],
+            blockedUsers: [],
+            bio: '',
+            streakCount: 1,
+            lastActiveDate: todayKey,
           };
-
-          console.log('🟢 setAuthState ÇAĞRILIYOR (isAuthenticated: true, isLoading: false)');
-          setAuthState({
-            user: profile,
-            isAuthenticated: true,
-            isLoading: false,
-            isNewUser: isNewData,
+          await userDocRef.set(firestoreData);
+        } else {
+          // Ardışık gün serisini hesapla ve online durumunu güncelle
+          streakCount = computeStreak(firestoreData?.lastActiveDate, firestoreData?.streakCount);
+          await userDocRef.update({
+            isOnline: true,
+            lastLogin: firestore.FieldValue.serverTimestamp(),
+            streakCount,
+            lastActiveDate: todayKey,
           });
-        } catch (error) {
-          console.error('🔴 Firestore profil yükleme hatası:', error);
-          setAuthState({ user: null, isAuthenticated: false, isLoading: false, isNewUser: false });
         }
-      } else {
-        console.log('🟡 setAuthState ÇAĞRILIYOR (firebaseUser NULL)');
+
+        const profile: User = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email ?? '',
+          displayName: sanitizeText(firebaseUser.displayName ?? firestoreData?.displayName ?? 'Oyuncu', 40),
+          createdAt: firestoreData?.createdAt ?? new Date().toISOString(),
+          avatarId: firestoreData?.avatarId ?? 'avatar-1',
+          heightCm: firestoreData?.heightCm ?? null,
+          weightKg: firestoreData?.weightKg ?? null,
+          gender: (firestoreData?.gender as Gender | null) ?? null,
+          hobbies: sanitizeStringArray(firestoreData?.hobbies ?? []),
+          musicGenres: sanitizeStringArray(firestoreData?.musicGenres ?? []),
+          totalScore: firestoreData?.totalScore ?? 0,
+          gamesPlayed: firestoreData?.gamesPlayed ?? 0,
+          gamesWon: firestoreData?.gamesWon ?? 0,
+          isOnline: true,
+          blockedUsers: firestoreData?.blockedUsers ?? [],
+          bio: firestoreData?.bio ?? '',
+          streakCount,
+          lastActiveDate: todayKey,
+        };
+
+        setAuthState({
+          user: profile,
+          isAuthenticated: true,
+          isLoading: false,
+          isNewUser: isNewData,
+        });
+      } catch (error) {
+        console.error('Firestore profil yükleme hatası:', error);
         setAuthState({ user: null, isAuthenticated: false, isLoading: false, isNewUser: false });
       }
     });
@@ -146,10 +156,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const { accessToken } = await GoogleSignin.getTokens();
 
-    console.log('--- GOOGLE LOGIN DEBUG ---');
-    console.log('idToken:', idToken ? 'VAR' : 'YOK');
-    console.log('accessToken:', accessToken ? 'VAR' : 'YOK');
-
     if (!accessToken) {
       throw new Error('Google accessToken alınamadı.');
     }
@@ -157,13 +163,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const realCredential = auth.GoogleAuthProvider.credential(idToken, accessToken);
 
     await firebaseAuth.signInWithCredential(realCredential);
-    console.log('🟢 signInWithCredential TAMAMLANDI');
   } catch (error: any) {
-    console.error('Google login detaylı hatası:', error);
+    console.error('Google login hatası:', error);
     setAuthState((prev) => ({ ...prev, isLoading: false }));
 
     if (error.code === 'SIGN_IN_CANCELLED') {
-      console.log('Kullanıcı girişi iptal etti.');
       return;
     }
     throw error;

@@ -118,7 +118,8 @@ async function runMatchTransaction(
     const opponentSnap = await transaction.get(opponentQueueRef);
 
     // Rakip başka biri tarafından az önce alınmış olabilir (race condition) -> kontrol et
-    if (!opponentSnap.exists || opponentSnap.data()?.status !== 'waiting') {
+    // Not: react-native-firebase v25'te `exists` bir metottur, property değil.
+    if (!opponentSnap.exists() || opponentSnap.data()?.status !== 'waiting') {
       throw new Error('Rakip artık uygun değil, tekrar deneniyor.');
     }
 
@@ -130,12 +131,9 @@ async function runMatchTransaction(
       matchedOpponentName: myDisplayName,
     });
 
-    // Kendi kuyruk kaydımız varsa (yoksa sorun değil) temizle
-    transaction.set(
-      myQueueRef,
-      { status: 'matched', matchedMatchId: matchRef.id },
-      { merge: true }
-    );
+    // Eşleşmeyi biz tetiklediğimiz için kuyrukta beklemiyorduk; yine de
+    // olası bir artık kaydı temizleyelim (öksüz doküman bırakmamak için).
+    transaction.delete(myQueueRef);
 
     // Ortak match dokümanını oluştur
     transaction.set(matchRef, {

@@ -18,13 +18,16 @@ export default function GuessTogetherScreen() {
         <Text style={styles.subtitle}>Takım arkadaşınla birlikte doğru cevabı yakala.</Text>
 
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>Takım puanı</Text>
-          <Text style={styles.score}>1.240</Text>
-          <Text style={styles.cardLabel}>Aktif takım</Text>
-          <Text style={styles.hint}>Aylin ve Can birlikte oynuyor</Text>
+          <Text style={styles.cardLabel}>🚧 Yakında</Text>
+          <Text style={styles.hint}>
+            Kooperatif "Birlikte Bulalım" modu üzerinde çalışıyoruz. Bu arada tek
+            kişilik Kelime Tahmini ya da online Kelime Zinciri modlarını deneyebilirsin.
+          </Text>
         </View>
 
-        <Pressable style={styles.primaryButton}><Text style={styles.primaryButtonText}>Birlikte Oyna</Text></Pressable>
+        <Pressable style={styles.primaryButton} onPress={() => navigation.navigate('WordChain')}>
+          <Text style={styles.primaryButtonText}>Kelime Zinciri'ni Dene</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );

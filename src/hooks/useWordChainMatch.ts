@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import firestore from '@react-native-firebase/firestore';
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import { isValidTurkishWord, standardizeWord } from '../utils/wordValidator';
 
@@ -17,7 +17,7 @@ type MatchData = {
   usedWords: string[];
   currentWord: string | null;
   turn: string;
-  turnStartedAt: firestore.FirebaseFirestoreTypes.Timestamp | null;
+  turnStartedAt: FirebaseFirestoreTypes.Timestamp | null;
   turnDuration: number;
   winnerUid: string | null;
 };
@@ -88,7 +88,7 @@ export function useWordChainMatch(matchId: string, myUid: string) {
 
   // 3. Süre dolduğunda: sırası gelen oyuncuyu eleyip rakibi kazandır
   const claimTimeout = useCallback(
-    async (expectedTurnStartedAt: firestore.FirebaseFirestoreTypes.Timestamp) => {
+    async (expectedTurnStartedAt: FirebaseFirestoreTypes.Timestamp) => {
       if (!matchRef) return;
 
       await db.runTransaction(async (transaction) => {

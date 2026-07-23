@@ -1,27 +1,28 @@
 // src/screens/ChatScreen.tsx (PARÇA 1)
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, Image, ActivityIndicator, Alert } from 'react-native';
+import { Animated, Easing, FlatList, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../services/firebaseConfig';
-import { sendMessage, subscribeToMessages, createPrivateChatRoom } from '../services/chatService';
+import { sendMessage, subscribeToMessages } from '../services/chatService';
 import { getAvatarById } from '../constants/avatars';
 import { ChatMessage, ChatRoom } from '../types';
 
 export default function ChatScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const { user } = useAuth();
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(16)).current;
 
-  const [activeTab, setActiveTab] = useState<'group' | 'private'>('group');
+  const [activeTab, setActiveTab] = useState<'group' | 'private'>(route.params?.initialTab ?? 'group');
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageText, setMessageText] = useState('');
   const [loadingRooms, setLoadingRooms] = useState(true);
-  const [currentRoomId, setCurrentRoomId] = useState<string>('general-lobby');
+  const [currentRoomId, setCurrentRoomId] = useState<string>(route.params?.initialRoomId ?? 'general-lobby');
 
   useEffect(() => {
     Animated.parallel([
@@ -35,13 +36,18 @@ export default function ChatScreen() {
     if (!user?.uid) return;
     setLoadingRooms(true);
 
+    // 🎯 PERFORMANS: canlı sorguları artık limitliyoruz (eskiden tüm grup odaları sürekli akıyordu).
     let query;
     if (activeTab === 'group') {
-      query = db.collection('chatRooms').where('isGroup', '==', true);
+      query = db.collection('chatRooms')
+        .where('isGroup', '==', true)
+        .orderBy('lastMessageAt', 'desc')
+        .limit(30);
     } else {
       query = db.collection('chatRooms')
         .where('isGroup', '==', false)
-        .where('participants', 'array-contains', user.uid);
+        .where('participants', 'array-contains', user.uid)
+        .limit(30);
     }
 
     const unsubscribe = query.onSnapshot((snapshot) => {
@@ -57,9 +63,10 @@ export default function ChatScreen() {
       });
 
       setRooms(loadedRooms);
-      
+
+      // Seçili oda hala listedeyse koru; değilse ilk odayı seç (parıl parıl seçim sıfırlanmasını önler).
       if (loadedRooms.length > 0) {
-        setCurrentRoomId(loadedRooms[0].id);
+        setCurrentRoomId((prev) => (loadedRooms.some((r) => r.id === prev) ? prev : loadedRooms[0].id));
       } else {
         setCurrentRoomId(activeTab === 'group' ? 'general-lobby' : '');
       }
@@ -105,28 +112,11 @@ export default function ChatScreen() {
     }
   };
 
-  const handleStartNewPrivateChat = async () => {
+  const handleStartNewPrivateChat = () => {
     if (!user) return;
-    Alert.alert(
-      "Yeni Sohbet", 
-      "Liderlik tablosundaki oyunculara tıklayarak da birebir sohbet başlatabilirsin! Şimdilik bir test DM odası açılsın mı?",
-      [
-        { text: "Vazgeç" },
-        { 
-          text: "Oda Kur", 
-          onPress: async () => {
-            try {
-              const testPartnerUid = "test-player-99";
-              const newRoomId = await createPrivateChatRoom(testPartnerUid, "Siber Avcı 🚀", "avatar-5");
-              setActiveTab('private');
-              setCurrentRoomId(newRoomId);
-            } catch (err) {
-              console.error(err);
-            }
-          }
-        }
-      ]
-    );
+    // Gerçek bir rakip seçmek için liderlik tablosuna yönlendiriyoruz
+    // (eskiden sabit bir "test-player-99" DM odası açılıyordu).
+    navigation.navigate('Leaderboard');
   };
 
   return (
@@ -215,12 +205,17 @@ export default function ChatScreen() {
           )}
         </View>
 
-        <ScrollView style={styles.messageList} contentContainerStyle={styles.messageListContent} showsVerticalScrollIndicator={false}>
-          {messages.map((message) => {
+        <FlatList
+          style={styles.messageList}
+          contentContainerStyle={styles.messageListContent}
+          showsVerticalScrollIndicator={false}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item: message }) => {
             const avatar = getAvatarById(message.senderAvatarId ?? 'avatar-1');
             const isMine = message.senderUid === user?.uid;
             return (
-              <View key={message.id} style={[styles.messageBubble, isMine ? styles.messageBubbleMine : styles.messageBubbleOther]}>
+              <View style={[styles.messageBubble, isMine ? styles.messageBubbleMine : styles.messageBubbleOther]}>
                 <View style={styles.senderRow}>
                   <View style={styles.avatarBadge}>
                     {avatar?.imageSource ? (
@@ -236,11 +231,11 @@ export default function ChatScreen() {
                 </View>
               </View>
             );
-          })}
-          {messages.length === 0 && !loadingRooms && (
+          }}
+          ListEmptyComponent={!loadingRooms ? (
             <Text style={styles.noMessagesText}>Bu odada henüz konuşma geçmedi. İlk mesajı sen at! 🌟</Text>
-          )}
-        </ScrollView>
+          ) : null}
+        />
 
         <View style={styles.inputRow}>
           <TextInput

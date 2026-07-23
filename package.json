@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@invertase/react-native-apple-authentication": "^2.5.1",
@@ -19,8 +20,6 @@
     "expo": "~54.0.35",
     "expo-dev-client": "~6.0.21",
     "expo-status-bar": "~3.0.9",
-    "firebase": "^12.16.0",
-    "prop-types": "^15.8.1",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-safe-area-context": "~5.6.0",

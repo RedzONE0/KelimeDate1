@@ -26,7 +26,8 @@ export default function HomeScreen() {
 
   // 🎯 GERÇEK VERİ STATE'LERİ
   const [leaderboard, setLeaderboard] = useState<any[]>([]); // Gerçek en yüksek puanlı 3 oyuncu
-  const [currentStreak, setCurrentStreak] = useState<number>((user as any)?.streakCount ?? 1);
+  // Seri değeri artık AuthContext'te günlük hesaplanıyor; profilden türetiyoruz.
+  const currentStreak = user?.streakCount ?? 1;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;

@@ -2,9 +2,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StatusBar, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import firestore from '@react-native-firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
-import { db } from '../../services/firebaseConfig';
+import { submitGuessWordResult } from '../../services/gameService';
 import { getRandomGameWord, standardizeWord, WordEntry } from '../../utils/wordValidator';
 
 const alphabet = 'ABCÇDEFGĞHİIJKLMNOÖPRSŞTUÜVYZ'.split('');
@@ -65,32 +64,15 @@ export default function GuessWordScreen() {
     setSubmitting(true);
 
     try {
-      const userDocRef = db.collection('users').doc(user.uid);
-      
-      if (isSolved) {
-        await userDocRef.update({
-          totalScore: firestore.FieldValue.increment(finalScore),
-          gamesPlayed: firestore.FieldValue.increment(1),
-          gamesWon: firestore.FieldValue.increment(1),
-        });
-      } else {
-        await userDocRef.update({
-          gamesPlayed: firestore.FieldValue.increment(1),
-        });
-      }
-
-      await db.collection('matches').add({
-        createdAt: new Date().toISOString(),
-        gameMode: 'kelime_tahmini',
-        winnerUid: isSolved ? user.uid : null,
-        loserUid: isSolved ? null : user.uid,
-        winnerName: isSolved ? user.displayName : 'Sistem',
-        loserName: isSolved ? 'Sistem' : user.displayName,
-        pointsEarned: isSolved ? finalScore : 0,
+      await submitGuessWordResult({
+        userId: user.uid,
+        displayName: user.displayName,
+        score: isSolved ? finalScore : 0,
+        solved: isSolved,
         word: wordData?.word || '',
+        gameMode: 'kelime_tahmini',
         livesLeft: lives,
       });
-
     } catch (error) {
       console.error('Oyun skoru kaydedilirken hata:', error);
     } finally {

@@ -1,6 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StatusBar, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { Animated, Easing, FlatList, Pressable, StatusBar, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { collections } from '../services/firebaseConfig';
@@ -30,7 +30,7 @@ export default function MatchHistoryScreen() {
       return;
     }
 
-    const col = collections.matches().where('players', 'array-contains', user.uid).orderBy('createdAt', 'desc').limit(50);
+    const col = collections.matches().where('participants', 'array-contains', user.uid).orderBy('createdAt', 'desc').limit(50);
     
     const unsub = col.onSnapshot((snapshot: any) => {
       // 🎯 KESİN ÇÖZÜM: docs property'sinin null veya undefined olma durumunu engelliyoruz!
@@ -59,51 +59,53 @@ export default function MatchHistoryScreen() {
     });
 
     return () => unsub();
-  }, [user]);
+  }, [user?.uid]);
+
+  const renderMatch = ({ item: mac }: { item: MatchItem }) => {
+    // Maç sonucuna göre dinamik neon renk tespiti
+    const isWin = ['kazandın', 'galibiyet', 'win', 'kazandi'].includes(mac.result.toLowerCase().trim());
+    return (
+      <View style={styles.matchCard}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.matchTitle}>{mac.title}</Text>
+          <Text style={styles.matchTime}>
+            {mac.createdAt?.toDate ? mac.createdAt.toDate().toLocaleString() : mac.createdAt ?? 'Bilinmeyen Zaman'}
+          </Text>
+        </View>
+        <View style={styles.matchMeta}>
+          <Text style={[styles.matchResult, { color: isWin ? '#4ade80' : '#f87171' }]}>{mac.result}</Text>
+          <Text style={[styles.matchScore, { color: isWin ? '#67e8f9' : '#94a3b8' }]}>
+            {isWin ? `+${mac.points}` : mac.points} Puan
+          </Text>
+        </View>
+      </View>
+    );
+  };
 return (
     <Animated.View style={[styles.container, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="light-content" backgroundColor="#060816" />
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          
-          {/* Üst Geri Dönüş Köprüsü */}
-          <Pressable style={styles.backButton} onPress={() => navigation.navigate('Home')}>
-            <Text style={styles.backText}>← Ana Sayfa</Text>
-          </Pressable>
-
-          <Text style={styles.title}>Geçmiş Maçlar</Text>
-          <Text style={styles.subtitle}>Son oyun performansın ve siber skorların burada.</Text>
-
-          {/* ⏳ VERİLER YÜKLENİRKEN GÖSTERİLECEK SİBER SPINNER */}
-          {screenLoading ? (
+        <FlatList
+          data={screenLoading ? [] : matches}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMatch}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={(
+            <View>
+              {/* Üst Geri Dönüş Köprüsü */}
+              <Pressable style={styles.backButton} onPress={() => navigation.navigate('Home')}>
+                <Text style={styles.backText}>← Ana Sayfa</Text>
+              </Pressable>
+              <Text style={styles.title}>Geçmiş Maçlar</Text>
+              <Text style={styles.subtitle}>Son oyun performansın ve siber skorların burada.</Text>
+            </View>
+          )}
+          ListEmptyComponent={screenLoading ? (
             <View style={styles.centerBox}>
               <ActivityIndicator size="large" color="#8b5cf6" />
               <Text style={styles.loadingText}>Siber geçmiş taranıyor...</Text>
             </View>
-          ) : matches.length > 0 ? (
-            matches.map((mac) => {
-              // Maç sonucuna göre dinamik neon renk tespiti
-              const isWin = ['kazandın', 'galibiyet', 'win', 'kazandi'].includes(mac.result.toLowerCase().trim());
-              
-              return (
-                <View key={mac.id} style={styles.matchCard}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.matchTitle}>{mac.title}</Text>
-                    <Text style={styles.matchTime}>
-                      {mac.createdAt?.toDate ? mac.createdAt.toDate().toLocaleString() : mac.createdAt ?? 'Bilinmeyen Zaman'}
-                    </Text>
-                  </View>
-                  <View style={styles.matchMeta}>
-                    <Text style={[styles.matchResult, { color: isWin ? '#4ade80' : '#f87171' }]}>
-                      {mac.result}
-                    </Text>
-                    <Text style={[styles.matchScore, { color: isWin ? '#67e8f9' : '#94a3b8' }]}>
-                      {isWin ? `+${mac.points}` : mac.points} Puan
-                    </Text>
-                  </View>
-                </View>
-              );
-            })
           ) : (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyIcon}>⚔</Text>
@@ -116,7 +118,7 @@ return (
               </Pressable>
             </View>
           )}
-        </ScrollView>
+        />
       </SafeAreaView>
     </Animated.View>
   );

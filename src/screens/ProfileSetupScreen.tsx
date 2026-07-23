@@ -103,7 +103,6 @@ export default function ProfileSetupScreen(): React.ReactElement {
       };
 
       await updateProfileData(profilePatch);
-      console.log("Profil başarıyla kaydedildi, akıllı yönlendirme devralıyor...");
     } catch (err: any) {
       Alert.alert('Kaydetme Hatası', err?.message ?? 'Profil kaydedilemedi.');
     } finally {
@@ -165,7 +164,7 @@ export default function ProfileSetupScreen(): React.ReactElement {
               <Text style={styles.inputLabel}>Boy (cm)</Text>
               <TextInput
                 value={heightCm}
-                onChangeText={(t) => setHeightCm(t.replace(/[^0-9,\\.]/g, ''))}
+                onChangeText={(t) => setHeightCm(t.replace(/[^0-9,.]/g, ''))}
                 keyboardType="numeric"
                 placeholder="örn. 175"
                 placeholderTextColor="#64748b"
@@ -177,7 +176,7 @@ export default function ProfileSetupScreen(): React.ReactElement {
               <Text style={styles.inputLabel}>Kilo (kg)</Text>
               <TextInput
                 value={weightKg}
-                onChangeText={(t) => setWeightKg(t.replace(/[^0-9,\\.]/g, ''))}
+                onChangeText={(t) => setWeightKg(t.replace(/[^0-9,.]/g, ''))}
                 keyboardType="numeric"
                 placeholder="örn. 72"
                 placeholderTextColor="#64748b"

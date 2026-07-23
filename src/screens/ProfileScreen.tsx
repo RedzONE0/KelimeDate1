@@ -32,10 +32,20 @@ export default function ProfileScreen() {
 
   // 🎯 DÜZENLEME STATE'LERİ
   const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false); // Avatar seçici pop-up durumu
-  const [bioText, setBioText] = useState((user as any)?.bio || ''); // Siber biyografi metni
+  const [bioText, setBioText] = useState(user?.bio ?? ''); // Siber biyografi metni
   const [hobbyInput, setHobbyInput] = useState(''); // Yeni hobi ekleme kutusu
   const [myHobbies, setMyHobbies] = useState<string[]>(user?.hobbies || []);
   const [isEditing, setIsEditing] = useState(false); // Düzenleme modu açık mı?
+  const [isBlockModalOpen, setIsBlockModalOpen] = useState(false); // UID ile engelleme pop-up'ı (Android uyumlu)
+  const [blockUidInput, setBlockUidInput] = useState('');
+
+  // Profil verisi (bio/hobiler) güncellendiğinde ekranı senkron tut
+  useEffect(() => {
+    if (!isEditing) {
+      setBioText(user?.bio ?? '');
+      setMyHobbies(user?.hobbies ?? []);
+    }
+  }, [user?.bio, user?.hobbies, isEditing]);
 
   // Animasyon referansları
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -84,17 +94,25 @@ export default function ProfileScreen() {
       setHobbyInput('');
       return;
     }
+    const previous = myHobbies;
     const updated = [...myHobbies, cleanHobby];
     setMyHobbies(updated);
     setHobbyInput('');
-    updateProfileData({ hobbies: updated }).catch(() => {}); 
+    updateProfileData({ hobbies: updated }).catch(() => {
+      setMyHobbies(previous); // hata olursa yerel durumu geri al
+      Alert.alert('Hata', 'Hobi kaydedilemedi, tekrar dene.');
+    });
   };
 
   // 🎯 HOBİ ETİKETİ SİLME
   const handleRemoveHobby = (hobi: string) => {
+    const previous = myHobbies;
     const updated = myHobbies.filter(item => item !== hobi);
     setMyHobbies(updated);
-    updateProfileData({ hobbies: updated }).catch(() => {});
+    updateProfileData({ hobbies: updated }).catch(() => {
+      setMyHobbies(previous);
+      Alert.alert('Hata', 'Hobi silinemedi, tekrar dene.');
+    });
   };
 
   // 🎯 DÜZELTME 2: TÜM PROFİLİ (BİO DAHİL) KAYDETME MOTORU (İsimler Çakışmıyor)
@@ -104,7 +122,7 @@ export default function ProfileScreen() {
       await updateProfileData({
         bio: bioText.trim(),
         hobbies: myHobbies
-      } as any);
+      });
       
       setIsEditing(false);
       Keyboard.dismiss();
@@ -116,37 +134,32 @@ export default function ProfileScreen() {
     }
   };
 
-  // 🛡️ Senin Harika Engelleme Fonksiyonun
-  const handleBlockUser = async () => {
-    Alert.prompt(
-      "Kullanıcı Engelle",
-      "Engellemek istediğin kullanıcının benzersiz ID'sini (UID) girin:",
-      [
-        { text: "Vazgeç", style: "cancel" },
-        {
-          text: "Engelle",
-          style: "destructive",
-          onPress: async (targetUid: string | undefined) => {
-            if (!targetUid || !user?.uid) return;
-            if (targetUid.trim() === user.uid) {
-              Alert.alert("Hata", "Kendini engelleyemezsin kanka! 😄");
-              return;
-            }
-            setLoading(true);
-            try {
-              await db.collection('users').doc(user.uid).update({
-                blockedUsers: firestore.FieldValue.arrayUnion(targetUid.trim())
-              });
-              Alert.alert("Başarılı", "Kullanıcı engellendi. 🛡️");
-            } catch (error) {
-              Alert.alert("Hata", "Kullanıcı engellenirken bir sorun oluştu.");
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
+  // 🛡️ Engelleme akışı — Alert.prompt yalnızca iOS'ta çalıştığı için
+  // Android'de de çalışan bir Modal + TextInput ile UID alıyoruz.
+  const handleBlockUser = () => {
+    setBlockUidInput('');
+    setIsBlockModalOpen(true);
+  };
+
+  const confirmBlockUser = async () => {
+    const targetUid = blockUidInput.trim();
+    if (!targetUid || !user?.uid) return;
+    if (targetUid === user.uid) {
+      Alert.alert("Hata", "Kendini engelleyemezsin kanka! 😄");
+      return;
+    }
+    setIsBlockModalOpen(false);
+    setLoading(true);
+    try {
+      await db.collection('users').doc(user.uid).update({
+        blockedUsers: firestore.FieldValue.arrayUnion(targetUid)
+      });
+      Alert.alert("Başarılı", "Kullanıcı engellendi. 🛡️");
+    } catch (error) {
+      Alert.alert("Hata", "Kullanıcı engellenirken bir sorun oluştu.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSignOut = () => {
@@ -309,6 +322,30 @@ export default function ProfileScreen() {
               <Text style={styles.signOutButtonText}>🚪 Güvenli Çıkış Yap</Text>
             </Pressable>
           </View>
+
+          {/* 🛡️ POP-UP MODAL: Android uyumlu UID ile engelleme */}
+          <Modal visible={isBlockModalOpen} transparent animationType="fade" onRequestClose={() => setIsBlockModalOpen(false)}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Kullanıcı Engelle</Text>
+                <Text style={styles.modalSubtitle}>Engellemek istediğin kullanıcının benzersiz ID'sini (UID) gir:</Text>
+                <TextInput
+                  style={styles.bioInput}
+                  value={blockUidInput}
+                  onChangeText={setBlockUidInput}
+                  placeholder="Kullanıcı UID"
+                  placeholderTextColor="#64748b"
+                  autoCapitalize="none"
+                />
+                <Pressable style={[styles.blockButton, { marginTop: 14, width: '100%' }]} onPress={confirmBlockUser}>
+                  <Text style={styles.blockButtonText}>Engelle</Text>
+                </Pressable>
+                <Pressable style={styles.modalCloseButton} onPress={() => setIsBlockModalOpen(false)}>
+                  <Text style={styles.modalCloseButtonText}>Vazgeç</Text>
+                </Pressable>
+              </View>
+            </View>
+          </Modal>
 
           {/* 🔄 POP-UP MODAL: Fütüristik Avatar Seçim Matrisi */}
           <Modal visible={isAvatarModalOpen} transparent animationType="fade" onRequestClose={() => setIsAvatarModalOpen(false)}>

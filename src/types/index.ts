@@ -1,10 +1,12 @@
+import { ImageSourcePropType } from 'react-native';
+
 export type Gender = 'erkek' | 'kadın' | 'belirtmek_istemiyorum';
 
 export interface Avatar {
   id: string;
   name: string;
   accentColor: string;
-  imageSource: any;
+  imageSource: ImageSourcePropType;
 }
 
 export interface UserProfile {
@@ -24,6 +26,10 @@ export interface UserProfile {
   isOnline: boolean;
   // --- 🛡️ GÜVENLİK/HUZUR MODÜLÜ ---
   blockedUsers: string[]; // Engellenen kullanıcıların UID listesini tutar
+  // --- Sosyal / oyun içi profil alanları ---
+  bio: string; // Kullanıcının kendini tanıttığı kısa metin
+  streakCount: number; // Ardışık aktif gün serisi
+  lastActiveDate?: string; // Serinin hesaplanması için son aktif gün (YYYY-MM-DD)
 }
 
 export interface User extends UserProfile {}
