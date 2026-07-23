@@ -1,13 +1,12 @@
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StatusBar, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { Animated, Pressable, StatusBar, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import firestore from '@react-native-firebase/firestore'; // Firebase hile koruması için eklendi
+import firestore from '@react-native-firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { db } from '../../services/firebaseConfig';
-import { getRandomGameWord, standardizeWord, WordEntry } from '../../utils/wordValidator'; // Senin motorun bağlandı!
+import { getRandomGameWord, standardizeWord, WordEntry } from '../../utils/wordValidator';
 
-// 🎯 DÜZELTME: Türkçe karakterler alfabeye eksiksiz eklendi
 const alphabet = 'ABCÇDEFGĞHİIJKLMNOÖPRSŞTUÜVYZ'.split('');
 
 export default function GuessWordScreen() {
@@ -24,7 +23,6 @@ export default function GuessWordScreen() {
   const [submitting, setSubmitting] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // 🎯 DÜZELTME: Kelimeyi dış servis yerine senin yazdığın yerel wordValidator'dan anında çeker
   const loadWord = () => {
     const nextWord = getRandomGameWord();
     if (nextWord) {
@@ -51,11 +49,8 @@ export default function GuessWordScreen() {
     ).start();
   }, [pulseAnim]);
 
-  // Kelimenin ekrandaki çizgili hali (_ _ _ _)
   const displayedWord = useMemo(() => {
     if (!wordData) return '';
-    
-    // Büyük küçük harf karmaşasını çözmek için kelimeyi standartlaştırarak dönüyoruz
     return wordData.word
       .split('')
       .map((letter) => {
@@ -65,7 +60,6 @@ export default function GuessWordScreen() {
       .join(' ');
   }, [revealedLetters, wordData]);
 
-  // 🎯 GÜVENLİK REKABET KURALI: Puanı sunucu tarafında 'increment' ile hilesiz artırır ve maçı kaydeder
   const saveGameResultToFirebase = async (isSolved: boolean, finalScore: number) => {
     if (!user?.uid || user.uid === 'guest') return;
     setSubmitting(true);
@@ -74,7 +68,6 @@ export default function GuessWordScreen() {
       const userDocRef = db.collection('users').doc(user.uid);
       
       if (isSolved) {
-        // Hile koruması: Kullanıcı telefondan sahte puan gönderemesin, sunucuda direkt artsın
         await userDocRef.update({
           totalScore: firestore.FieldValue.increment(finalScore),
           gamesPlayed: firestore.FieldValue.increment(1),
@@ -86,7 +79,6 @@ export default function GuessWordScreen() {
         });
       }
 
-      // Maç geçmişi koleksiyonuna kaydı ekliyoruz
       await db.collection('matches').add({
         createdAt: new Date().toISOString(),
         gameMode: 'kelime_tahmini',
@@ -115,7 +107,6 @@ export default function GuessWordScreen() {
     const nextUsedLetters = [...usedLetters, stdLetter];
     setUsedLetters(nextUsedLetters);
 
-    // Kelimenin harflerini de standartlaştırıp karşılaştırıyoruz
     const targetWordClean = standardizeWord(wordData.word);
 
     if (targetWordClean.includes(stdLetter)) {

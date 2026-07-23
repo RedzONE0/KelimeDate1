@@ -31,7 +31,7 @@ const sanitizeStringArray = (values: string[]): string[] =>
   Array.from(new Set(values.map((value) => sanitizeText(value, 40)).filter(Boolean)));
 
 GoogleSignin.configure({
-  webClientId: '681199810177-9pecsef70hbqpb2rafr9nhd8bh32gf1c.apps.googleusercontent.com',
+  webClientId: '681199810177-9pecsef70hbqpb2rafr9nhd8bh32gf1c.apps.googleusercontent.com', // Firebase projenizden alınan webClientId
   offlineAccess: true,
 });
 
@@ -128,43 +128,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const loginWithGoogle = async (): Promise<void> => {
-    setAuthState((prev) => ({ ...prev, isLoading: true }));
-    try {
-      if (Platform.OS === 'web') {
-        throw new Error('Google girişi bu platformda desteklenmiyor.');
-      }
-
-      await GoogleSignin.hasPlayServices();
-      const signInResult = await GoogleSignin.signIn();
-
-      const idToken = signInResult?.data?.idToken || (signInResult as any)?.idToken;
-
-      if (!idToken) {
-        throw new Error('Google idToken alınamadı. SHA-1 ve webClientId ayarlarını kontrol edin.');
-      }
-
-      const { accessToken } = await GoogleSignin.getTokens();
-
-      console.log('--- GOOGLE LOGIN DEBUG ---');
-      console.log('idToken:', idToken ? 'VAR' : 'YOK');
-      console.log('accessToken:', accessToken ? 'VAR' : 'YOK');
-
-      if (!accessToken) {
-        throw new Error('Google accessToken alınamadı. GoogleSignin.configure ayarlarını (webClientId, scopes) kontrol edin.');
-      }
-
-      const realCredential = auth.GoogleAuthProvider.credential(idToken, accessToken);
-
-      await firebaseAuth.signInWithCredential(realCredential);
-      console.log('🟢 signInWithCredential TAMAMLANDI');
-    } catch (error) {
-      console.error('Google login detaylı hatası:', error);
-      setAuthState((prev) => ({ ...prev, isLoading: false }));
-      throw error;
+  setAuthState((prev) => ({ ...prev, isLoading: true }));
+  try {
+    if (Platform.OS === 'web') {
+      throw new Error('Google girişi bu platformda desteklenmiyor.');
     }
 
-    
-  };
+    // Native kuyruğu tıkamaması için signOut() çağrısını buradan tamamen kaldırdık.
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    const signInResult = await GoogleSignin.signIn();
+
+    const idToken = signInResult?.data?.idToken || (signInResult as any)?.idToken;
+
+    if (!idToken) {
+      throw new Error('Google idToken alınamadı. SHA-1 ve webClientId ayarlarını kontrol edin.');
+    }
+
+    const { accessToken } = await GoogleSignin.getTokens();
+
+    console.log('--- GOOGLE LOGIN DEBUG ---');
+    console.log('idToken:', idToken ? 'VAR' : 'YOK');
+    console.log('accessToken:', accessToken ? 'VAR' : 'YOK');
+
+    if (!accessToken) {
+      throw new Error('Google accessToken alınamadı.');
+    }
+
+    const realCredential = auth.GoogleAuthProvider.credential(idToken, accessToken);
+
+    await firebaseAuth.signInWithCredential(realCredential);
+    console.log('🟢 signInWithCredential TAMAMLANDI');
+  } catch (error: any) {
+    console.error('Google login detaylı hatası:', error);
+    setAuthState((prev) => ({ ...prev, isLoading: false }));
+
+    if (error.code === 'SIGN_IN_CANCELLED') {
+      console.log('Kullanıcı girişi iptal etti.');
+      return;
+    }
+    throw error;
+  }
+};
 
   const loginWithApple = async (): Promise<void> => {
     setAuthState((prev) => ({ ...prev, isLoading: true }));
@@ -209,33 +213,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateProfileData = async (profileData: Partial<User>): Promise<void> => {
-  if (!authState.user) throw new Error('Kullanıcı oturum açmamış.');
+    if (!authState.user) throw new Error('Kullanıcı oturum açmamış.');
 
-  const activeUid = firebaseAuth.currentUser?.uid;
-  if (!activeUid || activeUid !== authState.user.uid) {
-    throw new Error('Güvenlik/Yetkilendirme hatası.');
-  }
+    const activeUid = firebaseAuth.currentUser?.uid;
+    if (!activeUid || activeUid !== authState.user.uid) {
+      throw new Error('Güvenlik/Yetkilendirme hatası.');
+    }
 
-  const sanitizedProfileData: Partial<User> = { ...profileData };
-  if (typeof sanitizedProfileData.displayName === 'string') {
-    sanitizedProfileData.displayName = sanitizeText(sanitizedProfileData.displayName, 40);
-  }
-  if (Array.isArray(sanitizedProfileData.hobbies)) {
-    sanitizedProfileData.hobbies = sanitizeStringArray(sanitizedProfileData.hobbies);
-  }
-  if (Array.isArray(sanitizedProfileData.musicGenres)) {
-    sanitizedProfileData.musicGenres = sanitizeStringArray(sanitizedProfileData.musicGenres);
-  }
+    const sanitizedProfileData: Partial<User> = { ...profileData };
+    if (typeof sanitizedProfileData.displayName === 'string') {
+      sanitizedProfileData.displayName = sanitizeText(sanitizedProfileData.displayName, 40);
+    }
+    if (Array.isArray(sanitizedProfileData.hobbies)) {
+      sanitizedProfileData.hobbies = sanitizeStringArray(sanitizedProfileData.hobbies);
+    }
+    if (Array.isArray(sanitizedProfileData.musicGenres)) {
+      sanitizedProfileData.musicGenres = sanitizeStringArray(sanitizedProfileData.musicGenres);
+    }
 
-  await db.collection('users').doc(authState.user.uid).set(sanitizedProfileData, { merge: true });
+    await db.collection('users').doc(authState.user.uid).set(sanitizedProfileData, { merge: true });
 
-  // 🎯 isNewUser'ı false yapıyoruz ki AppNavigator artık Home'a geçsin
-  setAuthState((prev) => ({
-    ...prev,
-    user: prev.user ? { ...prev.user, ...sanitizedProfileData } : null,
-    isNewUser: false,
-  }));
-};
+    setAuthState((prev) => ({
+      ...prev,
+      user: prev.user ? { ...prev.user, ...sanitizedProfileData } : null,
+      isNewUser: false,
+    }));
+  };
 
   const value = useMemo<AuthContextValue>(
     () => ({

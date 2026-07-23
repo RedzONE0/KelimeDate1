@@ -1,6 +1,7 @@
 import { auth, db } from './firebaseConfig';
 import firestoreModule from '@react-native-firebase/firestore';
-import { GameMatch, GameMode, User } from '../types';
+import { GameMatch, GameMode } from '../types';
+
 interface GuessWordPayload {
   id: string;
   word: string;
